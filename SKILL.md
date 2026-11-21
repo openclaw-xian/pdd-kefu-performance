@@ -76,6 +76,7 @@ node <skill目录>/run.mjs <config.json>
 - CDP 失败才回退 `fullPage`
 - 文件命名 `<店铺>-客服绩效-<label>.png`
 - 重复跑：日期/店铺总计相同 → 跳过覆盖（`重复截图: 是`）；不同 → 旧图备份 `.bak-<时间>.png`
+- **表格 0 行也截图**，`客服绩效.md` 写「数据状态：无数据」；只有表格结构找不到才 `table_not_found`
 
 ## 配置字段
 
@@ -101,7 +102,7 @@ node <skill目录>/run.mjs <config.json>
 - 空间页数 8/8 → 先按 profile 重建空间；仍失败 `page_budget_full`（needs exit 4）
 - 店铺名不匹配 → `shop_mismatch`
 - 日期回读不一致 → `date_not_applied`
-- 表格无数据 → `no_data`
+- 表格无数据 → 仍截图 + md 标「无数据」；只有表格结构找不到才 `table_not_found`
 - 找不到客服绩效页签 → `performance_tab_not_found`
 - 失败自动截图 + `failure-*.json`（URL/tabs/正文）
 - 退出码：3 预检 / 4 needs / 5 failed

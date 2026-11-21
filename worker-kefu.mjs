@@ -321,9 +321,11 @@ async function priorDataMatches(dateText, totals) {
 
 async function captureBottom(dateText) {
   await fs.mkdir(PERIOD_DIR, { recursive: true }).catch(() => {});
+  // 检测表格实际宽/高；0 行也截图，md 标记无数据
   await dismissNotifications();
   const info = await tableInfo();
-  if (!info || info.rowCount === 0) throw new Error("no_data:客服绩效表格无数据行");
+  if (!info) throw new Error("table_not_found:客服绩效表格未找到");
+  const noData = info.rowCount === 0;
   await page.evaluate(() => {
     const sc = document.scrollingElement || document.documentElement;
     sc.scrollTop = sc.scrollHeight;
@@ -361,7 +363,7 @@ async function captureBottom(dateText) {
     try { await fs.access(target); backup = target.replace(/\.png$/i, ".bak-" + new Date().toISOString().replace(/[-:T]/g, "").slice(4, 14) + ".png"); await fs.rename(target, backup); } catch (e) {}
     await fs.rename(tmp, target);
   }
-  return { png: target, sha, bytes: (await fs.stat(target)).size, width, height, tableRows: info.rowCount, totals: info.totals, backup, existingSame };
+  return { png: target, sha, bytes: (await fs.stat(target)).size, width, height, tableRows: info.rowCount, totals: info.totals, noData, backup, existingSame };
 }
 
 async function writeInfo(cap, dateText) {
@@ -377,6 +379,7 @@ async function writeInfo(cap, dateText) {
     "| 截图 | `" + path.basename(cap.png) + "` |",
     "| 尺寸 | " + cap.width + "×" + cap.height + "（页面底部完整表格） |",
     "| 表格行数 | " + cap.tableRows + " |",
+    "| 数据状态 | " + (cap.noData ? "无数据（0 行，仍保留空表截图）" : "有数据") + " |",
     "| 文件大小 | " + raw.length + " 字节 |",
     "| SHA-256 | " + cap.sha + " |",
     "| 重复截图 | " + (cap.existingSame ? "是（已跳过覆盖）" : "否") + " |",
@@ -386,6 +389,7 @@ async function writeInfo(cap, dateText) {
   if (cap.totals && Object.keys(cap.totals).length) {
     lines.push("", "## 店铺总计", ...Object.entries(cap.totals).map(([k, v]) => "- " + k + ": " + v));
   }
+  if (cap.noData) lines.push("", "## 数据状态", "- 无数据：该期间客服绩效表格 0 行，已保留空表截图。");
   await fs.writeFile(PERIOD_DIR + "/客服绩效.md", lines.join("\n"), "utf8");
   return { sha: cap.sha, bytes: raw.length };
 }
@@ -411,9 +415,8 @@ async function doctor() {
   await dismissNotifications();
   const dateText = await setDateRange();
   const info = await tableInfo();
-  if (!info) throw new Error("no_data:客服绩效表格未找到");
-  if (info.rowCount === 0) throw new Error("no_data:客服绩效表格无数据行");
-  return { status: "doctor_ok", dateText, tableRows: info.rowCount, totals: info.totals };
+  if (!info) throw new Error("table_not_found:客服绩效表格未找到");
+  return { status: "doctor_ok", dateText, tableRows: info.rowCount, totals: info.totals, noData: info.rowCount === 0 };
 }
 
 async function main() {
@@ -428,7 +431,7 @@ async function main() {
   return {
     status: "done", orders: null, screenshot: cap.png, dateText,
     sha256: meta.sha, bytes: meta.bytes, width: cap.width, height: cap.height,
-    tableRows: cap.tableRows, totals: cap.totals, backup: cap.backup, existingSame: cap.existingSame,
+    tableRows: cap.tableRows, totals: cap.totals, noData: cap.noData, backup: cap.backup, existingSame: cap.existingSame,
   };
 }
 
