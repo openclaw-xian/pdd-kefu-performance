@@ -58,6 +58,7 @@ node <skill目录>/run.mjs <config.json>
 
 ## 截图规则
 
+- **先关闭右上角「新消息」弹窗**（`ImportantList_close`），避免挡住表格
 - 先把页面滚到最底部
 - 用 CDP `Page.captureScreenshot` 截 **1908×944**、`captureBeyondViewport:true`，保证最右列和底部「共有 N 条」都在
 - CDP 失败才回退 `fullPage`

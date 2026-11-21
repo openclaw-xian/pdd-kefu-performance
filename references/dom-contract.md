@@ -30,6 +30,12 @@
 - 客服绩效页是**日期区间**，起止都含当天
 - 目标 10 月：`2026-10-01 ~ 2026-10-31`，不要 +1 天
 
+## 通知弹窗
+
+- 右上角可能出现 `新消息 (N)` 卡片，容器 `ImportantList_msgbox__...`
+- 关闭：`i[class*='ImportantList_close']`（约 32×32），鼠标点中心
+- 位置可能盖住表格右侧；截图前必须关闭
+
 ## 截图
 
 - 先滚到 `document.scrollingElement.scrollTop = scrollHeight`

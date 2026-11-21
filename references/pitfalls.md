@@ -6,6 +6,7 @@
 | 日期面板点箭头后消失 | 组件行为 | 重开面板、回读 `RPR_headerSelector` 月份再继续 |
 | 选了日期但数据没变 | 漏点「确认」 | 选起止日 → 确认 → 回读输入值 |
 | 把 10 月选成 10/01~11/01 | 误用订单导出的 +1 天规则 | 客服绩效是日期区间：**结束日就是最后一天，不 +1** |
+| 右上角「新消息 (N)」挡住表格 | 站内信弹窗 | 点 `ImportantList_close` 关闭后再截图；worker 在开页/切页签/截图前都会尝试关 |
 | 截图右边被裁 | 浏览器窗口窄，表格横向超宽 | 用 CDP `Page.captureScreenshot` + `captureBeyondViewport`，clip 1908×944 |
 | 截不到底部/共有N条 | 没滚到底 | `scrollTop = scrollHeight` 后再截 |
 | 输出跑到别处 | root/期间命名不对 | `<root>/<店铺>/<期间>/<店铺>-客服绩效-<label>.png` |

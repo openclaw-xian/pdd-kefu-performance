@@ -80,6 +80,24 @@ async function openShopSpace() {
   return shop;
 }
 
+async function dismissNotifications() {
+  for (let i = 0; i < 3; i++) {
+    const close = await page.evaluate(() => {
+      const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+      const cls = (e) => String(e.className && e.className.baseVal !== undefined ? e.className.baseVal : (e.className || ""));
+      const el = [...document.querySelectorAll("i,span,div,button,s")].filter((e) => vis(e) && /ImportantList_close/.test(cls(e)))[0];
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return { x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2) };
+    }).catch(() => null);
+    if (!close) return false;
+    log("dismiss_notification");
+    await page.mouse.click(close.x, close.y, { label: "close notification" });
+    await page.waitForTimeout(500);
+  }
+  return true;
+}
+
 async function openPerformanceTab() {
   const hit = await page.evaluate(() => {
     const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -228,6 +246,7 @@ async function setDateRange() {
 
 async function captureBottom() {
   await fs.mkdir(PERIOD_DIR, { recursive: true }).catch(() => {});
+  await dismissNotifications();
   await page.evaluate(() => {
     const sc = document.scrollingElement || document.documentElement;
     sc.scrollTop = sc.scrollHeight;
@@ -274,8 +293,11 @@ async function writeInfo(png, dateText) {
 
 async function main() {
   await openShopSpace();
+  await dismissNotifications();
   await openPerformanceTab();
+  await dismissNotifications();
   const dateText = await setDateRange();
+  await dismissNotifications();
   const png = await captureBottom();
   const meta = await writeInfo(png, dateText);
   return { status: "done", orders: null, screenshot: png, dateText, sha256: meta.sha, bytes: meta.bytes };
