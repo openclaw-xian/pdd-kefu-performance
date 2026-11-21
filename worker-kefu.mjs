@@ -66,7 +66,16 @@ async function openShopSpace() {
     task = entry.ownership === "user" ? await claimTaskSpace(entry.id)
       : entry.ownership === "agentDelegatedToUser" ? await takeOverTaskSpace(entry.id)
       : await taskSpace(entry.id);
-    page = await newPageSafe();
+    try {
+      page = await newPageSafe();
+    } catch (e) {
+      if (!/page_budget_full/.test(String(e.message || e))) throw e;
+      log("page_budget_recreate_space");
+      try { await task.finish({ keep: [] }); } catch (e2) {}
+      task = null; page = null;
+      const shop = await createSpaceForProfile(JOB.profile);
+      if (!shop) throw e;
+    }
   } else {
     const shop = await createSpaceForProfile(JOB.profile);
     if (!shop) throw new Error("space_not_found_for:" + (JOB.profile || JOB.shop));
@@ -257,35 +266,107 @@ async function setDateRange() {
   throw new Error("date_not_applied:" + expected);
 }
 
-async function captureBottom() {
+async function tableInfo() {
+  return page.evaluate(() => {
+    const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const txt = (e) => (e ? (e.innerText || "").replace(/\s+/g, " ").trim() : "");
+    const tables = [...document.querySelectorAll("table")].filter(vis);
+    let table = tables.find((t) => (t.innerText || "").includes("客服账号"));
+    if (!table && tables.length) table = tables.sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0];
+    if (!table) {
+      const el = [...document.querySelectorAll("div")].filter(vis).find((e) => txt(e).includes("客服账号") && txt(e).includes("店铺总计"));
+      if (!el) return null;
+      table = el;
+    }
+    const r = table.getBoundingClientRect();
+    const sc = document.scrollingElement || document.documentElement;
+    const allRows = [...table.querySelectorAll("tr")].filter(vis);
+    let headerCells = [...table.querySelectorAll("thead th, thead td")].map((e) => txt(e));
+    let dataRows;
+    if (headerCells.length && headerCells.some((h) => h.includes("客服账号"))) {
+      dataRows = allRows.slice(1).map((tr) => [...tr.querySelectorAll("td")].map((td) => txt(td)));
+    } else {
+      const firstCells = allRows.length ? [...allRows[0].querySelectorAll("td,th")].map((e) => txt(e)) : [];
+      headerCells = firstCells;
+      dataRows = allRows.slice(1).map((tr) => [...tr.querySelectorAll("td")].map((td) => txt(td)));
+    }
+    const first = dataRows[0] || [];
+    const totals = {};
+    headerCells.forEach((h, i) => { if (i < first.length) totals[h] = first[i]; });
+    return {
+      headers: headerCells,
+      rowCount: dataRows.length,
+      totals,
+      tableRight: Math.round(r.right + sc.scrollLeft),
+      tableTop: Math.round(r.top + sc.scrollTop),
+      tableHeight: Math.round(r.height),
+      docWidth: Math.round(Math.max(sc.scrollWidth, document.documentElement.scrollWidth)),
+      docHeight: Math.round(Math.max(sc.scrollHeight, document.documentElement.scrollHeight)),
+      scrollY: Math.round(sc.scrollTop),
+    };
+  });
+}
+
+async function priorDataMatches(dateText, totals) {
+  try {
+    const md = await fs.readFile(PERIOD_DIR + "/客服绩效.md", "utf8");
+    const m = md.match(/\| 日期回读 \| ([^|]+) \|/);
+    if (!m || m[1].trim() !== dateText) return false;
+    for (const [k, v] of Object.entries(totals || {})) {
+      if (!md.includes("- " + k + ": " + v)) return false;
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+async function captureBottom(dateText) {
   await fs.mkdir(PERIOD_DIR, { recursive: true }).catch(() => {});
   await dismissNotifications();
+  const info = await tableInfo();
+  if (!info || info.rowCount === 0) throw new Error("no_data:客服绩效表格无数据行");
   await page.evaluate(() => {
     const sc = document.scrollingElement || document.documentElement;
     sc.scrollTop = sc.scrollHeight;
   });
   await page.waitForTimeout(600);
-  const y = await page.evaluate(() => (document.scrollingElement || document.documentElement).scrollTop);
-  const png = PERIOD_DIR + "/" + JOB.pngName;
+  const width = Math.max(1908, info.tableRight + 24, info.docWidth);
+  const y = Math.max(0, info.tableTop - 120);
+  const height = Math.max(944, info.tableHeight + 220);
+  const tmp = PERIOD_DIR + "/." + JOB.pngName + ".tmp-" + Date.now() + ".png";
   let data = null;
   try {
     const res = await page.cdp("Page.captureScreenshot", {
       format: "png",
       captureBeyondViewport: true,
-      clip: { x: 0, y, width: 1908, height: 944, scale: 1 },
+      clip: { x: 0, y, width, height, scale: 1 },
     });
     data = typeof res === "string" ? res : (res.data || res.result?.data);
   } catch (e) { log("cdp_screenshot_failed", String((e && e.message) || e)); }
-  if (data) await fs.writeFile(png, Buffer.from(data, "base64"));
-  else await page.screenshot({ path: png, fullPage: true });
-  return png;
+  if (data) await fs.writeFile(tmp, Buffer.from(data, "base64"));
+  else await page.screenshot({ path: tmp, fullPage: true });
+  const crypto = await import("node:crypto");
+  const sha = crypto.createHash("sha256").update(await fs.readFile(tmp)).digest("hex");
+  const target = PERIOD_DIR + "/" + JOB.pngName;
+  let backup = null;
+  let existingSame = false;
+  try {
+    const old = await fs.readFile(target);
+    const oldSha = crypto.createHash("sha256").update(old).digest("hex");
+    existingSame = oldSha === sha;
+  } catch (e) {}
+  if (!existingSame && await priorDataMatches(dateText, info.totals)) existingSame = true;
+  if (existingSame) {
+    await fs.unlink(tmp).catch(() => {});
+  } else {
+    try { await fs.access(target); backup = target.replace(/\.png$/i, ".bak-" + new Date().toISOString().replace(/[-:T]/g, "").slice(4, 14) + ".png"); await fs.rename(target, backup); } catch (e) {}
+    await fs.rename(tmp, target);
+  }
+  return { png: target, sha, bytes: (await fs.stat(target)).size, width, height, tableRows: info.rowCount, totals: info.totals, backup, existingSame };
 }
 
-async function writeInfo(png, dateText) {
-  const raw = await fs.readFile(png);
-  const crypto = await import("node:crypto");
-  const sha = crypto.createHash("sha256").update(raw).digest("hex");
-  const md = [
+async function writeInfo(cap, dateText) {
+  const raw = await fs.readFile(cap.png);
+  const lines = [
     "# 客服绩效 · " + JOB.shop + " · " + JOB.label,
     "",
     "| 项 | 值 |",
@@ -293,15 +374,46 @@ async function writeInfo(png, dateText) {
     "| 店铺 | " + JOB.shop + " |",
     "| 期间 | " + JOB.from + " ~ " + JOB.to + " |",
     "| 日期回读 | " + dateText + " |",
-    "| 截图 | `" + JOB.pngName + "` |",
-    "| 尺寸 | 1908×944（页面底部） |",
+    "| 截图 | `" + path.basename(cap.png) + "` |",
+    "| 尺寸 | " + cap.width + "×" + cap.height + "（页面底部完整表格） |",
+    "| 表格行数 | " + cap.tableRows + " |",
     "| 文件大小 | " + raw.length + " 字节 |",
-    "| SHA-256 | " + sha + " |",
-    "| 来源 | 客服数据 → 客服绩效数据 |",
-    "| 采集时间 | " + localStamp() + " |",
-  ].join("\n");
-  await fs.writeFile(PERIOD_DIR + "/客服绩效.md", md, "utf8");
-  return { sha, bytes: raw.length };
+    "| SHA-256 | " + cap.sha + " |",
+    "| 重复截图 | " + (cap.existingSame ? "是（已跳过覆盖）" : "否") + " |",
+  ];
+  if (cap.backup) lines.push("| 旧图备份 | `" + path.basename(cap.backup) + "` |");
+  lines.push("| 来源 | 客服数据 → 客服绩效数据 |", "| 采集时间 | " + localStamp() + " |");
+  if (cap.totals && Object.keys(cap.totals).length) {
+    lines.push("", "## 店铺总计", ...Object.entries(cap.totals).map(([k, v]) => "- " + k + ": " + v));
+  }
+  await fs.writeFile(PERIOD_DIR + "/客服绩效.md", lines.join("\n"), "utf8");
+  return { sha: cap.sha, bytes: raw.length };
+}
+
+async function saveFailureEvidence(msg) {
+  if (!page || !JOB.logPath) return null;
+  const dir = path.dirname(JOB.logPath);
+  const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+  const base = path.join(dir, JOB.shop + "-failure-" + stamp);
+  const out = { error: msg, at: localStamp(), url: "", body: "", tabs: [] };
+  try { out.url = await page.evaluate(() => location.href); } catch (e) {}
+  try { out.body = await page.evaluate(() => (document.body.innerText || "").replace(/\s+/g, " ").slice(0, 1200)); } catch (e) {}
+  try { if (task) out.tabs = (await task.tabs()).map((t) => String(t.url || "").slice(0, 120)); } catch (e) {}
+  try { await page.screenshot({ path: base + ".png" }); out.screenshot = base + ".png"; } catch (e) {}
+  await fs.writeFile(base + ".json", JSON.stringify(out, null, 1), "utf8").catch(() => {});
+  return base + ".png";
+}
+
+async function doctor() {
+  await openShopSpace();
+  await dismissNotifications();
+  await openPerformanceTab();
+  await dismissNotifications();
+  const dateText = await setDateRange();
+  const info = await tableInfo();
+  if (!info) throw new Error("no_data:客服绩效表格未找到");
+  if (info.rowCount === 0) throw new Error("no_data:客服绩效表格无数据行");
+  return { status: "doctor_ok", dateText, tableRows: info.rowCount, totals: info.totals };
 }
 
 async function main() {
@@ -311,19 +423,24 @@ async function main() {
   await dismissNotifications();
   const dateText = await setDateRange();
   await dismissNotifications();
-  const png = await captureBottom();
-  const meta = await writeInfo(png, dateText);
-  return { status: "done", orders: null, screenshot: png, dateText, sha256: meta.sha, bytes: meta.bytes };
+  const cap = await captureBottom(dateText);
+  const meta = await writeInfo(cap, dateText);
+  return {
+    status: "done", orders: null, screenshot: cap.png, dateText,
+    sha256: meta.sha, bytes: meta.bytes, width: cap.width, height: cap.height,
+    tableRows: cap.tableRows, totals: cap.totals, backup: cap.backup, existingSame: cap.existingSame,
+  };
 }
 
 let result;
 try {
-  result = await main();
+  result = JOB.mode === "doctor" ? await doctor() : await main();
   await writeResult({ ok: true, ...result });
 } catch (e) {
   const msg = String((e && e.message) || e);
   log("ERROR", msg);
-  result = { status: "failed", error: msg };
+  const evidence = await saveFailureEvidence(msg);
+  result = { status: "failed", error: msg, evidence };
   if (msg.includes("page_budget_full")) {
     result.needs = { code: "page_budget_full", question: "空间标签页已满，请关闭多余标签页后重跑。" };
   }

@@ -7,6 +7,11 @@ import os from "node:os";
 import path from "node:path";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function addDays(iso, n) {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 const CFG_PATH = process.argv[2];
 if (!CFG_PATH) { console.error("用法: node run.mjs <config.json>"); process.exit(2); }
 const CFG = JSON.parse(await fs.readFile(CFG_PATH, "utf8"));
@@ -30,6 +35,8 @@ const RUN_DIR = path.join(ROOT, "_runs", RUN_ID);
 const RESULT_DIR = path.join(RUN_DIR, "results");
 const LOG_DIR = path.join(RUN_DIR, "logs");
 const CONCURRENCY = Math.max(1, Math.min(6, Number(CFG.concurrency || 1)));
+const DOCTOR = !!CFG.doctor || CFG.mode === "doctor";
+const RETENTION_DAYS = Math.max(1, Math.min(365, Number(CFG.retentionDays || 62)));
 
 const from = String(CFG.from || "");
 const to = String(CFG.to || "");
@@ -39,6 +46,10 @@ const addIssue = (code, q, extra = {}) => issues.push({ code, question: q, ...ex
 if (!/^20\d\d-\d\d-\d\d$/.test(from) || !/^20\d\d-\d\d-\d\d$/.test(to)) addIssue("range_invalid", "from/to 必须是 YYYY-MM-DD", { from, to });
 else if (from > to) addIssue("range_reversed", "起始日晚于结束日", { from, to });
 else if (to > today) addIssue("range_in_future", "结束日在未来（今天 " + today + "）", { to });
+else {
+  const earliest = addDays(today, -RETENTION_DAYS);
+  if (from < earliest) addIssue("date_before_retention", "客服绩效只保留最近约 " + RETENTION_DAYS + " 天；最早可选 " + earliest + "，当前 from=" + from, { from, earliest, retentionDays: RETENTION_DAYS });
+}
 
 const rootOnC = /^[A-Za-z]:/.test(ROOT) && ROOT[0].toUpperCase() === "C" && !CFG.allowC;
 if (!existsSync(ROOT)) {
@@ -79,16 +90,17 @@ await fs.mkdir(RESULT_DIR, { recursive: true });
 await fs.mkdir(LOG_DIR, { recursive: true });
 await fs.mkdir(RUNTIME + "/" + RUN_ID, { recursive: true });
 
-async function runOne(store, i) {
+async function runOne(store, i, mode = "run") {
   const job = {
     shop: store.shop,
     profile: store.profile || null,
     from, to, root: ROOT,
     periodDir, label,
     pngName: store.shop + "-客服绩效-" + label + ".png",
-    resultPath: path.join(RESULT_DIR, store.shop + ".json"),
+    resultPath: mode === "doctor" ? path.join(os.tmpdir(), "pdd-kefu-doctor-" + RUN_ID + "-" + i + ".json") : path.join(RESULT_DIR, store.shop + ".json"),
     logPath: path.join(LOG_DIR, store.shop + ".log"),
     keepOpen: !!CFG.keepOpen,
+    mode,
   };
   const wrapper = RUNTIME + "/" + RUN_ID + "/job-" + i + ".mjs";
   await fs.writeFile(wrapper, "globalThis.__JOB = " + JSON.stringify(job) + ";\nawait import('file:///" + WORKER + "');\n", "utf8");
@@ -101,6 +113,18 @@ async function runOne(store, i) {
   for (let k = 0; k < 12 && !result; k++) { try { result = JSON.parse(await fs.readFile(job.resultPath, "utf8")); } catch (e) { await sleep(300); } }
   if (!result) result = { ok: false, status: "failed", error: "no_result_file" };
   return { shop: store.shop, result, wallSec: Number(((Date.now() - started) / 1000).toFixed(1)) };
+}
+
+if (DOCTOR) {
+  const rs = [];
+  for (let i = 0; i < stores.length; i++) {
+    const r = await runOne(stores[i], i, "doctor");
+    rs.push(r);
+    console.log("DOCTOR " + r.shop + " " + (r.result.status || "?") + " rows=" + (r.result.tableRows === undefined ? "-" : r.result.tableRows) + " date=" + (r.result.dateText || "-") + " wall=" + r.wallSec + "s");
+  }
+  const ok = rs.every((r) => r.result && r.result.ok);
+  console.log("\nDOCTOR_RESULT=" + JSON.stringify({ ok, from, to, stores: rs }, null, 1));
+  process.exit(ok ? 0 : 1);
 }
 
 const completed = new Array(stores.length);

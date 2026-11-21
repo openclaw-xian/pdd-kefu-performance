@@ -48,6 +48,15 @@ node <skill目录>/run.mjs <config.json>
 └─ <店铺>-订单-<月>月.csv         # pdd-order-export
 ```
 
+## 自检 doctor（只读，不截图）
+
+```json
+{ "doctor": true, "from": "2026-10-01", "to": "2026-10-31", "shops": [...] }
+```
+
+- 校验店铺、客服绩效页签、日期回读、表格行数
+- 不写截图/客服绩效.md；输出 `DOCTOR_RESULT`
+
 ## 日期规则
 
 - 打开日期输入（`开始时间 ~ 结束时间`）→ RPR 面板
@@ -55,16 +64,18 @@ node <skill目录>/run.mjs <config.json>
 - 点起始日、结束日 → 点「确认」→ 回读输入 `YYYY-MM-DD ~ YYYY-MM-DD`
 - 不一致重试最多 3 次；面板中途关闭会重开
 - 结束日就是用户需要的最后一天，**不要自动加一天**
-- **平台只保留最近约 60 天**：实测 2026-11-21 时，9/1–9/19 禁用、最早可选 **9/20**。更早日期无法选，会报 `start_date_unavailable`；不要硬选。
+- **平台只保留最近 62 天**（2026-11-21 实测三家店一致：最早可选 **2026-09-20**；`from < 今天-62` 直接预检失败，`date_before_retention`）。更早日期无法选，不要硬选。
 - 部分月份要和其他产物放同一个 `YYYY-MM` 目录时，用 `periodDir` + `label` 覆盖（例如 9/20–9/30 → `periodDir:"2026-09"`、`label:"9月20日-9月30日"`）。
 
 ## 截图规则
 
 - **先关闭右上角「新消息」弹窗**（`ImportantList_close`），避免挡住表格
+- 检测表格实际列宽/高度：宽度 ≥1908，高度 ≥944；账号多时输出更高，保证整表
 - 先把页面滚到最底部
-- 用 CDP `Page.captureScreenshot` 截 **1908×944**、`captureBeyondViewport:true`，保证最右列和底部「共有 N 条」都在
+- 用 CDP `Page.captureScreenshot` 截动态区域（`captureBeyondViewport:true`），保证最右列和底部「共有 N 条」都在
 - CDP 失败才回退 `fullPage`
 - 文件命名 `<店铺>-客服绩效-<label>.png`
+- 重复跑：日期/店铺总计相同 → 跳过覆盖（`重复截图: 是`）；不同 → 旧图备份 `.bak-<时间>.png`
 
 ## 配置字段
 
@@ -78,16 +89,21 @@ node <skill目录>/run.mjs <config.json>
 | `periodDir` | 自动 | 覆盖期间目录（如 `2026-09`） |
 | `label` | 自动 | 覆盖文件名标签（如 `9月20日-9月30日`） |
 | `concurrency` | 1 | 并行店铺 1–6 |
+| `retentionDays` | 62 | 平台保留天数；预检用 |
+| `doctor` | false | 只读自检，不截图 |
 | `keepOpen` | false | 成功也保留页面 |
 | `jobTimeoutSec` | 180 | 单店超时 |
 | `ego` / `worker` / `runtimeDir` / `allowC` | 自动 | 同其他 pdd skill |
 
 ## 失败条件
 
-- 空间页数 8/8 → `page_budget_full`（needs，exit 4）
+- 日期早于保留期 → `date_before_retention`（预检 exit 3，带最早可选日）
+- 空间页数 8/8 → 先按 profile 重建空间；仍失败 `page_budget_full`（needs exit 4）
 - 店铺名不匹配 → `shop_mismatch`
 - 日期回读不一致 → `date_not_applied`
+- 表格无数据 → `no_data`
 - 找不到客服绩效页签 → `performance_tab_not_found`
+- 失败自动截图 + `failure-*.json`（URL/tabs/正文）
 - 退出码：3 预检 / 4 needs / 5 failed
 
 ## 红线

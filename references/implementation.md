@@ -10,7 +10,7 @@ worker-kefu.mjs   ego 内：找店 → 客服绩效页签 → 选日期 → 滚�
 ## 调度器
 
 1. 读 `from/to/root/shops|_stores.json/concurrency`
-2. 预检日期/根目录/ego/店铺清单；问题 → `PREFLIGHT`，exit 3
+2. 预检日期/根目录/ego/店铺清单；**from < 今天-62 天 → `date_before_retention`**（三家店实测最早 9/20）；问题 → `PREFLIGHT`，exit 3
 3. 期间目录：整月 `YYYY-MM`，区间 `from_to`
 4. 标签：整月 `<M>月`；区间 `<M月D日-M月D日>`
 5. 并行 `concurrency`（1–6）跑店；每店一个 worker 进程
@@ -25,11 +25,17 @@ worker-kefu.mjs   ego 内：找店 → 客服绩效页签 → 选日期 → 滚�
    - 点起日/止日 → `确认` → 回读 `YYYY-MM-DD ~ YYYY-MM-DD`
    - 最多 3 次；面板中途关闭会重开
 4. **截图**：
-   - `scrollTop = scrollHeight`
-   - CDP 宽截图 1908×944（captureBeyondViewport）
+   - 检测表格实际宽高（宽度 ≥1908、高度 ≥944；账号多时更高）
+   - 滚到底；CDP `Page.captureScreenshot` + `captureBeyondViewport` 动态裁剪
+   - 同日期/同店铺总计 → 跳过覆盖（`重复截图=是`）；不同 → 旧图 `.bak-<时间>.png`
    - 失败回退 fullPage
-5. **元数据**：`客服绩效.md`（期间/日期回读/截图/大小/SHA-256/来源/采集时间）
-6. 成功 `finish({keep:[]})`；失败保留页面（`PAGE_LEFT_OPEN`）
+5. **元数据**：`客服绩效.md`（期间/日期回读/尺寸/行数/文件/哈希/重复截图/旧图备份 + **店铺总计**）
+6. 成功 `finish({keep:[]})`；失败保留页面 + `failure-*.png/json`
+
+## doctor（只读）
+
+- `doctor:true`：打开页/页签/日期回读/表格行数校验；不截图、不写 md。
+- 退出码：通过 0，失败 1。
 
 ## 维护点
 
