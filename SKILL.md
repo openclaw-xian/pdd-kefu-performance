@@ -1,0 +1,94 @@
+---
+name: pdd-kefu-performance
+description: 拼多多多店铺「客服绩效数据」采集与留档。按店铺 × 期间打开商家后台「客服数据 → 客服绩效数据」，把日期选为用户指定区间（如整月），滚到页面底部截完整表格，存到 <账单根目录>\<店铺>\<期间>\<店铺>-客服绩效-<月>月.png，并生成 客服绩效.md。产物与货款账单、推广花费、订单导出放在同一店铺/期间目录。Use when 用户要截取/留档拼多多客服绩效数据、客服数据报表、按店铺按月归档客服绩效截图。
+---
+
+# pdd-kefu-performance — 客服绩效数据截图/留档
+
+> 本 skill 只做 **客服数据 → 客服绩效数据**：选日期 + 底部完整表格截图 + 元数据。
+> 不做导出、下载，不做服务数据/销售数据/催付数据/开场白数据。
+
+## 前置条件
+
+- Windows + ego-browser；各店 profile 已登录
+- Node.js
+- 账单根目录：默认 `D:/pdd-bills`，可配 `root`
+- 店铺清单：`<root>/_stores.json` 或 config `shops`（建议显式给）
+
+## 用法
+
+```bash
+node <skill目录>/run.mjs <config.json>
+```
+
+```json
+{
+  "from": "2026-10-01",
+  "to": "2026-10-31",
+  "root": "D:/pdd-bills",
+  "concurrency": 3,
+  "shops": [
+    { "shop": "<店铺A>", "profile": "<profile-A>" }
+  ]
+}
+```
+
+- 日期：`from/to` 都含当天，**不 +1 天**（客服绩效页是日期区间）
+- 整月标签：`<M>月`；非整月：`<M月D日-M月D日>`
+- 店铺清单也可从 `<root>/_stores.json` 读取；支持 `only`
+
+## 输出（与另外三个 skill 同目录）
+
+```
+<root>\<店铺>\<期间>\
+├─ <店铺>-客服绩效-<月>月.png     # 1908×944 页面底部完整表格
+├─ 客服绩效.md                     # 期间/日期回读/截图/哈希
+├─ <店铺>-对账中心-<月>月.csv     # pdd-bills
+├─ <店铺>-推广-<月>月.png         # pdd-promo-cost
+└─ <店铺>-订单-<月>月.csv         # pdd-order-export
+```
+
+## 日期规则
+
+- 打开日期输入（`开始时间 ~ 结束时间`）→ RPR 面板
+- 翻月到起止月；同月时起止日都在左表；跨月时起日左、止日右
+- 点起始日、结束日 → 点「确认」→ 回读输入 `YYYY-MM-DD ~ YYYY-MM-DD`
+- 不一致重试最多 3 次；面板中途关闭会重开
+- 结束日就是用户需要的最后一天，**不要自动加一天**
+
+## 截图规则
+
+- 先把页面滚到最底部
+- 用 CDP `Page.captureScreenshot` 截 **1908×944**、`captureBeyondViewport:true`，保证最右列和底部「共有 N 条」都在
+- CDP 失败才回退 `fullPage`
+- 文件命名 `<店铺>-客服绩效-<label>.png`
+
+## 配置字段
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `from` / `to` | 必填 | `YYYY-MM-DD`，都含当天 |
+| `root` | `D:/pdd-bills` | 账单根目录 |
+| `shops` | — | `[{shop, profile}]` 或只写 shop |
+| `storesConfig` | `<root>/_stores.json` | 清单路径 |
+| `only` | — | 只跑指定店铺 |
+| `concurrency` | 1 | 并行店铺 1–6 |
+| `keepOpen` | false | 成功也保留页面 |
+| `jobTimeoutSec` | 180 | 单店超时 |
+| `ego` / `worker` / `runtimeDir` / `allowC` | 自动 | 同其他 pdd skill |
+
+## 失败条件
+
+- 空间页数 8/8 → `page_budget_full`（needs，exit 4）
+- 店铺名不匹配 → `shop_mismatch`
+- 日期回读不一致 → `date_not_applied`
+- 找不到客服绩效页签 → `performance_tab_not_found`
+- 退出码：3 预检 / 4 needs / 5 failed
+
+## 红线
+
+1. 不导出、不下载客服数据
+2. 日期不做 +1 天
+3. 只截客服绩效数据，不切其他页签
+4. 截图必须包含底部行和「共有 N 条」
+5. 产物必须落在 `<店铺>/<期间>`，和其他三个 skill 同目录
