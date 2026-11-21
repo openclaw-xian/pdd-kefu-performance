@@ -55,6 +55,8 @@ node <skill目录>/run.mjs <config.json>
 - 点起始日、结束日 → 点「确认」→ 回读输入 `YYYY-MM-DD ~ YYYY-MM-DD`
 - 不一致重试最多 3 次；面板中途关闭会重开
 - 结束日就是用户需要的最后一天，**不要自动加一天**
+- **平台只保留最近约 60 天**：实测 2026-11-21 时，9/1–9/19 禁用、最早可选 **9/20**。更早日期无法选，会报 `start_date_unavailable`；不要硬选。
+- 部分月份要和其他产物放同一个 `YYYY-MM` 目录时，用 `periodDir` + `label` 覆盖（例如 9/20–9/30 → `periodDir:"2026-09"`、`label:"9月20日-9月30日"`）。
 
 ## 截图规则
 
@@ -73,6 +75,8 @@ node <skill目录>/run.mjs <config.json>
 | `shops` | — | `[{shop, profile}]` 或只写 shop |
 | `storesConfig` | `<root>/_stores.json` | 清单路径 |
 | `only` | — | 只跑指定店铺 |
+| `periodDir` | 自动 | 覆盖期间目录（如 `2026-09`） |
+| `label` | 自动 | 覆盖文件名标签（如 `9月20日-9月30日`） |
 | `concurrency` | 1 | 并行店铺 1–6 |
 | `keepOpen` | false | 成功也保留页面 |
 | `jobTimeoutSec` | 180 | 单店超时 |

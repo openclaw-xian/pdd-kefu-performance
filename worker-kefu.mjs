@@ -154,11 +154,12 @@ async function arrows() {
     const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
     const cls = (e) => String(e.className && e.className.baseVal !== undefined ? e.className.baseVal : (e.className || ""));
     const prev = [], next = [];
-    for (const e of document.querySelectorAll("svg")) {
+    for (const e of document.querySelectorAll("i,svg")) {
       if (!vis(e) || !/RPR_iconPrevNext/.test(cls(e))) continue;
       const b = e.getBoundingClientRect();
-      const it = { x: Math.round(b.x), y: Math.round(b.y + b.height / 2), right: /RPR_right/.test(cls(e)) };
-      (it.right ? next : prev).push(it);
+      const right = /RPR_right|ICN_type-right/.test(cls(e));
+      const it = { x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2), right };
+      (right ? next : prev).push(it);
     }
     prev.sort((a, b) => a.x - b.x); next.sort((a, b) => a.x - b.x);
     return { prev, next };
@@ -221,8 +222,20 @@ async function setDateRange() {
     if (!(await openPanel())) throw new Error("date_panel_not_open");
     await setPanel("left", startMonth);
     if (endMonth !== startMonth) await setPanel("right", endMonth);
+    log("date_headers", JSON.stringify(await header()));
     const sc = await cellRect(0, startDay);
-    if (!sc) throw new Error("start_cell_not_found:" + startDay);
+    if (!sc) {
+      const first = await page.evaluate(() => {
+        const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+        const cls = (e) => String(e.className && e.className.baseVal !== undefined ? e.className.baseVal : (e.className || ""));
+        const wrap = [...document.querySelectorAll("div")].filter(vis).find((e) => /RPR_outerPickerWrapper/.test(cls(e)));
+        if (!wrap) return "";
+        const table = [...wrap.querySelectorAll("[class*='RPR_tableWrapper']")][0];
+        const days = [...table.querySelectorAll("[class*='RPR_cell']")].filter((e) => vis(e) && !/RPR_disabled|RPR_outOfMonth/.test(cls(e))).map((e) => (e.innerText || "").trim()).filter((x) => /^\d+$/.test(x));
+        return days.length ? days[0] : "";
+      });
+      throw new Error("start_date_unavailable:" + JOB.from + (first ? " 最早可选=" + first : ""));
+    }
     await page.mouse.click(sc.x, sc.y);
     await page.waitForTimeout(350);
     const ec = await cellRect(endMonth === startMonth ? 0 : 1, endDay);

@@ -39,4 +39,4 @@ node run.mjs kefu-config.json
 └─ 客服绩效.md
 ```
 
-日期不做 +1 天；只截客服绩效，不导出/不下载。详细见 [SKILL.md](SKILL.md)。
+日期不做 +1 天；平台只保留最近约 60 天（更早日期点不动）。部分月份可用 `periodDir`/`label` 落到同一个月目录。只截客服绩效，不导出/不下载。详细见 [SKILL.md](SKILL.md)。
