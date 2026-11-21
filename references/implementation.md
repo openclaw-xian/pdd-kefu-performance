@@ -46,5 +46,5 @@ worker-kefu.mjs   ego 内：找店 → 客服绩效页签 → 选日期 → 滚�
 | 页签文本 | `openPerformanceTab` |
 | 日期输入/选择器 | `openPanel/header/arrows/setPanel/cellRect` |
 | 确认按钮 | `clickText("确认")` |
-| 截图尺寸/裁剪 | `captureBottom` 的 1908×944 |
+| 截图尺寸/裁剪 | `captureBottom` 的动态宽高（≥1908×944，账号多更高） |
 | 输出命名 | runner 的 `pngName` |
