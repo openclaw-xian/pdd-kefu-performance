@@ -12,7 +12,7 @@
 
 - Windows + ego-browser（各店 profile 已登录）
 - Node.js
-- 账单根目录（默认 `D:/pdd-bills`，可配 `root`）
+- 账单根目录（默认 `<记账根目录>`，可配 `root`）
 - 店铺清单：config `shops` 或 `<root>/_stores.json`
 
 ## 用法
@@ -25,7 +25,7 @@ node run.mjs kefu-config.json
 {
   "from": "2026-10-01",
   "to": "2026-10-31",
-  "root": "D:/pdd-bills",
+  "root": "<记账根目录>",
   "concurrency": 3,
   "shops": [{ "shop": "<店铺A>", "profile": "<profile-A>" }]
 }

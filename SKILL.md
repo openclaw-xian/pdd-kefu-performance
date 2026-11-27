@@ -12,7 +12,7 @@ description: 拼多多多店铺「客服绩效数据」采集与留档。按店�
 
 - Windows + ego-browser；各店 profile 已登录
 - Node.js
-- 账单根目录：默认 `D:/pdd-bills`，可配 `root`
+- 账单根目录：默认 `<记账根目录>`，可配 `root`
 - 店铺清单：`<root>/_stores.json` 或 config `shops`（建议显式给）
 
 ## 用法
@@ -25,7 +25,7 @@ node <skill目录>/run.mjs <config.json>
 {
   "from": "2026-10-01",
   "to": "2026-10-31",
-  "root": "D:/pdd-bills",
+  "root": "<记账根目录>",
   "concurrency": 3,
   "shops": [
     { "shop": "<店铺A>", "profile": "<profile-A>" }
@@ -95,7 +95,7 @@ node <skill目录>/run.mjs <config.json>
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `from` / `to` | 必填 | `YYYY-MM-DD`，都含当天 |
-| `root` | `D:/pdd-bills` | 账单根目录 |
+| `root` | `<记账根目录>` | 账单根目录 |
 | `shops` | — | `[{shop, profile}]` 或只写 shop |
 | `storesConfig` | `<root>/_stores.json` | 清单路径 |
 | `only` | — | 只跑指定店铺 |

@@ -10,7 +10,7 @@ const log = (...a) => {
   logs.push(line); console.log(line);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const ROOT = (JOB.root || "D:/pdd-bills").replace(/\\/g, "/").replace(/\/$/, "");
+const ROOT = (JOB.root || path.join(process.cwd(), "pdd-bills")).replace(/\\/g, "/").replace(/\/$/, "");
 const PERIOD_DIR = ROOT + "/" + JOB.shop + "/" + JOB.periodDir;
 let task = null;
 let page = null;

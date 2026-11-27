@@ -26,7 +26,7 @@ function findEgo() {
   ]) if (existsSync(x)) return x;
   return "ego-browser";
 }
-const ROOT = String(CFG.root || process.env.PDD_BILLS_ROOT || "D:/pdd-bills").replace(/\\/g, "/").replace(/\/$/, "");
+const ROOT = String(CFG.root || process.env.PDD_BILLS_ROOT || path.join(process.cwd(), "pdd-bills")).replace(/\\/g, "/").replace(/\/$/, "");
 const EGO = String(CFG.ego || process.env.PDD_EGO_BROWSER || findEgo()).replace(/\\/g, "/");
 const STORES_CFG = String(CFG.storesConfig || path.join(ROOT, "_stores.json")).replace(/\\/g, "/");
 const RUNTIME = String(CFG.runtimeDir || path.join(os.tmpdir(), "pdd-kefu-runtime")).replace(/\\/g, "/").replace(/\/$/, "");
